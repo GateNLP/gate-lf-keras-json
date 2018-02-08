@@ -110,20 +110,41 @@ class KerasWrapper(Dataset):
     def trainModel(self, batchSize = 2, nb_epoch=5):
         self.split(convert=True, keep_orig=False, validation_part=0.05)
         valset = self.validation_set_converted(as_batch=True)
+        valx = self.convertX(valset[0])
+        valy = valset[1]
+        newvalx = []
+        for item in valx:
+            newvalx.append(np.array(item))
+
         for i in range(nb_epoch):
             print('epoch ', i)
-            self.trainKerasModelBatch(valset, batchSize)
+            self.trainKerasModelBatch(batchSize)
+            print(newvalx[0].shape)
+            valLoss = self.model.evaluate(x=newvalx, y=np.array(valy))
+            print('val loss ', valLoss)
 
-    def trainKerasModelBatch(self, valset, batchSize):
+    def convertValx(self,xList):
+        numInputAttribute = max(self.inputMask)+1
+        miniBatchX = [[] for i in range(numInputAttribute)]
+
+        for item in xList:
+            for eachAttribute in miniBatchX:
+                eachAttribute.append([])
+            for maskIdx in range(len(self.inputMask)):
+                miniBatchX[self.inputMask[maskIdx]][-1].append(item[maskIdx])
+        return miniBatchX
+
+
+    def trainKerasModelBatch(self, batchSize):
         convertedTraining=self.batches_converted(train=True, batch_size=batchSize)
         for batchInstances in convertedTraining:
             featureList = batchInstances[0]
             target = batchInstances[1]
-            print(featureList)
+            #print(featureList)
             miniBatchY = target
             miniBatchX = self.convertX(featureList)
-            print(miniBatchY)
-            print(miniBatchX)
+            #print(miniBatchY)
+            #print(miniBatchX)
             self.trainMiniBatch(miniBatchX, miniBatchY)
 
     def convertX(self,xList):
@@ -145,10 +166,10 @@ class KerasWrapper(Dataset):
         for item in miniBatchX:
             newX.append(np.array(item))
         #print(newX)
+        print(newX[0].shape)
         trainLoss = self.model.train_on_batch(x=newX, y=np.array(miniBatchY))
-        loss = self.model.test_on_batch(x=newX, y=np.array(miniBatchY))
+        #loss = self.model.test_on_batch(x=newX, y=np.array(miniBatchY))
         print(trainLoss)
-
-
+        
 
 
