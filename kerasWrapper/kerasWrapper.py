@@ -1,10 +1,19 @@
 import sys
 sys.path.append("/Users/xingyi/Gate/learningFrameWorkDeepLearning/gate-lf-python-data/")
 from gatelfdata import Dataset
+import numpy as np
+from keras.models import Sequential,Model
+from keras.layers import Dense,Input,Concatenate
+from keras.layers import LSTM, Conv1D, Flatten, Dropout, Merge, TimeDistributed,MaxPooling1D
+from keras.layers.embeddings import Embedding
+from keras.preprocessing import sequence
+from sklearn.preprocessing import label_binarize
+
+
 
 class KerasWrapper(Dataset):
-    def __init__(self):
-        Dataset.__init__(self)
+    def __init__(self, metafile):
+        Dataset.__init__(self, metafile)
         self.inputMask = []
         self.featureKindList = []
         for currentFeature in self.features.features:
@@ -50,8 +59,6 @@ class KerasWrapper(Dataset):
             print(self.outputLayersList)
             allHidden = Concatenate()(self.outputLayersList)
             print(allHidden)
-            numOutput = len(self.metaData['targetStats']['stringCounts'])
-            print(numOutput)
             output = Dense(self.nClasses, activation = "softmax")(allHidden)
             model = Model(self.inputLayerList, output)
             model.compile(loss='binary_crossentropy', optimizer='Adamax', metrics=['accuracy'])
@@ -68,19 +75,15 @@ class KerasWrapper(Dataset):
             if ('N' not in currentKindList):
                 isSequence=False
                 isNum = False
-                vocabSize = len(self.features.features[featureIndexList[0]].vocab.freqs)
+                vocabSize = len(self.features.features[featureIndexList[0][0]].vocab.freqs)+10000
                 current_input = Input(shape=(len(currentKindList),))
                 #vocoList = self.getSingleVocabList(featureIndexList)
                 current_output = Embedding(vocabSize, self.embeddingSize, input_length=len(currentKindList))(current_input)
             else:
                 current_input = Input(shape=(None,))
                 isSequence=True
-                if attribId in self.metaData['vocabulary']:
-                    current_output = Embedding(vocabSize, self.embeddingSize)(current_input)
-                    isNum=False
-                else:
-                    print('n-gram do not accept numbers input')
-                    sys.exit(0)
+                current_output = Embedding(vocabSize, self.embeddingSize)(current_input)
+                isNum=False
             self.inputLayerList.append(current_input)
             self.outputLayersList.append(current_output)
             self.featureState.append([isSequence,isNum])
@@ -104,29 +107,34 @@ class KerasWrapper(Dataset):
                 current_output = Dense(32)(current_output)
             self.outputLayersList[i] = current_output
 
-    def trainModel(self, batchSize = 256, nb_epoch=5):
-        valset = self.convert_to_file()
+    def trainModel(self, batchSize = 2, nb_epoch=5):
+        self.split(convert=True, keep_orig=False, validation_part=0.05)
+        valset = self.validation_set_converted(as_batch=True)
         for i in range(nb_epoch):
             print('epoch ', i)
-            trainKerasModelBatch(valset)
+            self.trainKerasModelBatch(valset, batchSize)
 
-    def trainKerasModelBatch(self, valset, batchSize = 256):
-        convertedTraining=self.batches_converted(batch_size=batchSize)
+    def trainKerasModelBatch(self, valset, batchSize):
+        convertedTraining=self.batches_converted(train=True, batch_size=batchSize)
         for batchInstances in convertedTraining:
             featureList = batchInstances[0]
             target = batchInstances[1]
+            print(featureList)
             miniBatchY = target
             miniBatchX = self.convertX(featureList)
+            print(miniBatchY)
+            print(miniBatchX)
             self.trainMiniBatch(miniBatchX, miniBatchY)
 
     def convertX(self,xList):
-        numInputFeatures = max(self.inputMask)+1
-        miniBatchX = [[] for i in range(numInputFeatures)]
-        for x in xList:
-            for eachFeature in miniBatchX:
-                eachFeature.append([])
+        numInputAttribute = max(self.inputMask)+1
+        miniBatchX = [[] for i in range(numInputAttribute)]
+
+        for xid in range(len(xList[0])):
+            for eachAttribute in miniBatchX:
+                eachAttribute.append([])
             for maskIdx in range(len(self.inputMask)):
-                miniBatchX[self.inputMask[maskIdx]][-1].append(x[maskIdx])
+                miniBatchX[self.inputMask[maskIdx]][-1].append(xList[maskIdx][xid])
         return miniBatchX
         
             
@@ -136,6 +144,7 @@ class KerasWrapper(Dataset):
         newX = []
         for item in miniBatchX:
             newX.append(np.array(item))
+        #print(newX)
         trainLoss = self.model.train_on_batch(x=newX, y=np.array(miniBatchY))
         loss = self.model.test_on_batch(x=newX, y=np.array(miniBatchY))
         print(trainLoss)
