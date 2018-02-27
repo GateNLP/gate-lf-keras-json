@@ -143,6 +143,7 @@ class KerasWrapperImpl1(object):
     def trainModel(self, batchSize=4, nb_epoch=20):
         self.ds.split(convert=True, keep_orig=False, validation_part=0.05)
         valset = self.ds.validation_set_converted(as_batch=True)
+        print(valset[1])
         valx = self.convertX(valset[0])
         valy = to_categorical(valset[1], num_classes=self.ds.nClasses)
         newvalx = []
