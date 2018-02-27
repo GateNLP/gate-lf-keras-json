@@ -4,6 +4,8 @@ from keras.models import Sequential, Model
 from keras.layers import Dense, Input, Concatenate
 from keras.layers import LSTM, Conv1D, Flatten, Dropout, Merge, TimeDistributed, MaxPooling1D, Conv2D
 from keras.layers.embeddings import Embedding
+from keras.utils import to_categorical
+
 
 class KerasWrapperImpl1(object):
     def __init__(self, dataSet, configDict=None):
@@ -13,12 +15,13 @@ class KerasWrapperImpl1(object):
 
         self.inputMask = [None] * self.ds.nFeatures
         self.featureKindList = [None] * self.ds.nFeatures
-        self.num_idxs = dataSet.get_numeric_feature_idxs()
-        self.nom_idxs = dataSet.get_nominal_feature_idxs()
-        self.ngr_idxs = dataSet.get_ngram_feature_idxs()
+        self.num_idxs = dataSet.get_float_feature_idxs()
+        self.nom_idxs = dataSet.get_index_feature_idxs()
+        self.ngr_idxs = dataSet.get_indexlist_feature_idxs()
         self.genMask()
         self.inputMask = np.array(self.inputMask)
         print(self.inputMask)
+        print(self.featureKindList)
         self.featureKindList = np.array(self.featureKindList)
         self.uniqueAttri, self.AttriCount = np.unique(self.inputMask, return_counts=True)
         self.batchSize = 64
@@ -137,11 +140,11 @@ class KerasWrapperImpl1(object):
             self.outputLayersList.append(current_output)
             self.featureState.append([sequenceFeature, numFeature])
 
-    def trainModel(self, batchSize=64, nb_epoch=20):
+    def trainModel(self, batchSize=4, nb_epoch=20):
         self.ds.split(convert=True, keep_orig=False, validation_part=0.05)
         valset = self.ds.validation_set_converted(as_batch=True)
         valx = self.convertX(valset[0])
-        valy = valset[1]
+        valy = to_categorical(valset[1], num_classes=self.ds.nClasses)
         newvalx = []
         print(valx)
         for item in valx:
@@ -162,8 +165,12 @@ class KerasWrapperImpl1(object):
         for batchInstances in convertedTraining:
             featureList = batchInstances[0]
             target = batchInstances[1]
-            # print(featureList)
-            miniBatchY = target
+            print(len(target))
+            print(target)
+            print(self.ds.nClasses)
+            miniBatchY = to_categorical(target,num_classes=self.ds.nClasses)
+            print(len(miniBatchY))
+            print(miniBatchY)
             miniBatchX = self.convertX(featureList)
             # print(miniBatchY)
             # print(miniBatchX)
@@ -178,6 +185,7 @@ class KerasWrapperImpl1(object):
     def convertX(self, xList):
         # numInputAttribute = max(self.inputMask)+1
         numInputAttribute = len(self.uniqueAttri)
+        print(numInputAttribute)
         miniBatchX = [[] for i in range(numInputAttribute)]
 
         for xid in range(len(xList[0])):
@@ -197,6 +205,7 @@ class KerasWrapperImpl1(object):
             newX.append(np.array(item))
         #print(newX[0][0])
         # print(newX[0].shape)
+        print(len(miniBatchY))
         trainLoss = self.model.train_on_batch(x=newX, y=np.array(miniBatchY))
         # loss = self.model.test_on_batch(x=newX, y=np.array(miniBatchY))
         # print(trainLoss)
