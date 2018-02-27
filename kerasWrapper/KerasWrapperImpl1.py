@@ -4,7 +4,7 @@ from keras.models import Sequential, Model
 from keras.layers import Dense, Input, Concatenate
 from keras.layers import LSTM, Conv1D, Flatten, Dropout, Merge, TimeDistributed, MaxPooling1D, Conv2D
 from keras.layers.embeddings import Embedding
-
+from keras.utils import to_categorical
 
 class KerasWrapperImpl1(object):
     def __init__(self, dataSet, configDict=None):
@@ -14,9 +14,13 @@ class KerasWrapperImpl1(object):
 
         self.inputMask = [None] * self.ds.nFeatures
         self.featureKindList = [None] * self.ds.nFeatures
-        self.num_idxs = dataSet.get_numeric_feature_idxs()
-        self.nom_idxs = dataSet.get_nominal_feature_idxs()
-        self.ngr_idxs = dataSet.get_ngram_feature_idxs()
+        #self.num_idxs = dataSet.get_numeric_feature_idxs()
+        #self.nom_idxs = dataSet.get_nominal_feature_idxs()
+        #self.ngr_idxs = dataSet.get_ngram_feature_idxs()
+        self.num_idxs = dataSet.get_float_feature_idxs()
+        self.nom_idxs = dataSet.get_index_feature_idxs()
+        self.ngr_idxs = dataSet.get_indexlist_feature_idxs()
+
         self.genMask()
         self.inputMask = np.array(self.inputMask)
         print(self.inputMask)
@@ -140,7 +144,7 @@ class KerasWrapperImpl1(object):
         self.ds.split(convert=True, keep_orig=False, validation_part=0.05)
         valset = self.ds.validation_set_converted(as_batch=True)
         valx = self.convertX(valset[0])
-        valy = valset[1]
+        valy = to_categorical(valset[1], num_classes=self.nClasses)
         newvalx = []
         for item in valx:
             newvalx.append(np.array(item))
@@ -158,7 +162,7 @@ class KerasWrapperImpl1(object):
             featureList = batchInstances[0]
             target = batchInstances[1]
             # print(featureList)
-            miniBatchY = target
+            miniBatchY = to_categorical(target,num_classes=self.nClasses)
             miniBatchX = self.convertX(featureList)
             # print(miniBatchY)
             # print(miniBatchX)

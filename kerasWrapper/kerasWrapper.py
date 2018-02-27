@@ -8,7 +8,7 @@ from keras.layers import LSTM, Conv1D, Flatten, Dropout, Merge, TimeDistributed,
 from keras.layers.embeddings import Embedding
 from keras.preprocessing import sequence
 from sklearn.preprocessing import label_binarize
-
+from keras.utils import to_categorical
 
 
 class KerasWrapper(Dataset):
@@ -52,7 +52,7 @@ class KerasWrapper(Dataset):
     def genKerasModel(self):
         self.genInputLayer()
         self.genHiddenLayers()
-        sequenceTarget = False
+        sequenceTarget = self.isSequence
         if sequenceTarget:
             pass
         else:
@@ -111,7 +111,8 @@ class KerasWrapper(Dataset):
         self.split(convert=True, keep_orig=False, validation_part=0.05)
         valset = self.validation_set_converted(as_batch=True)
         valx = self.convertX(valset[0])
-        valy = valset[1]
+        valy = to_categorical(valset[1], num_classes=self.nClasses)
+        
         newvalx = []
         for item in valx:
             newvalx.append(np.array(item))
@@ -141,7 +142,7 @@ class KerasWrapper(Dataset):
             featureList = batchInstances[0]
             target = batchInstances[1]
             #print(featureList)
-            miniBatchY = target
+            miniBatchY = to_categorical(target,num_classes=self.nClasses)
             miniBatchX = self.convertX(featureList)
             #print(miniBatchY)
             #print(miniBatchX)
