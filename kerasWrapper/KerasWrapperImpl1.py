@@ -1,10 +1,9 @@
-import sys
+from __future__ import division
 import numpy as np
 from keras.models import Sequential, Model
 from keras.layers import Dense, Input, Concatenate
 from keras.layers import LSTM, Conv1D, Flatten, Dropout, Merge, TimeDistributed, MaxPooling1D, Conv2D
 from keras.layers.embeddings import Embedding
-from keras.utils import to_categorical
 
 class KerasWrapperImpl1(object):
     def __init__(self, dataSet, configDict=None):
@@ -14,18 +13,15 @@ class KerasWrapperImpl1(object):
 
         self.inputMask = [None] * self.ds.nFeatures
         self.featureKindList = [None] * self.ds.nFeatures
-        #self.num_idxs = dataSet.get_numeric_feature_idxs()
-        #self.nom_idxs = dataSet.get_nominal_feature_idxs()
-        #self.ngr_idxs = dataSet.get_ngram_feature_idxs()
-        self.num_idxs = dataSet.get_float_feature_idxs()
-        self.nom_idxs = dataSet.get_index_feature_idxs()
-        self.ngr_idxs = dataSet.get_indexlist_feature_idxs()
-
+        self.num_idxs = dataSet.get_numeric_feature_idxs()
+        self.nom_idxs = dataSet.get_nominal_feature_idxs()
+        self.ngr_idxs = dataSet.get_ngram_feature_idxs()
         self.genMask()
         self.inputMask = np.array(self.inputMask)
         print(self.inputMask)
         self.featureKindList = np.array(self.featureKindList)
         self.uniqueAttri, self.AttriCount = np.unique(self.inputMask, return_counts=True)
+        self.batchSize = 64
         self.embeddingSize = 16
         self.inputLayerList = []
         self.outputLayersList = []
@@ -101,6 +97,7 @@ class KerasWrapperImpl1(object):
             else:
                 if sequenceFeature:
                     current_output = LSTM(units=16, return_sequences=False)(current_output)
+                    current_output = Dense(32)(current_output)
                     #current_output = Conv1D(filters=32, kernel_size=2, strides=1, activation='relu')(current_output)
 
                 else:
@@ -140,33 +137,43 @@ class KerasWrapperImpl1(object):
             self.outputLayersList.append(current_output)
             self.featureState.append([sequenceFeature, numFeature])
 
-    def trainModel(self, batchSize=1, nb_epoch=5):
+    def trainModel(self, batchSize=64, nb_epoch=20):
         self.ds.split(convert=True, keep_orig=False, validation_part=0.05)
         valset = self.ds.validation_set_converted(as_batch=True)
         valx = self.convertX(valset[0])
-        valy = to_categorical(valset[1], num_classes=self.nClasses)
+        valy = valset[1]
         newvalx = []
+        print(valx)
         for item in valx:
             newvalx.append(np.array(item))
 
         for i in range(nb_epoch):
             print('epoch ', i)
             self.trainKerasModelBatch(batchSize)
-            print(newvalx[0].shape)
+            #print(newvalx[0].shape)
+            #print(newvalx)
             valLoss = self.model.evaluate(x=newvalx, y=np.array(valy))
-            print('val loss ', valLoss)
+            print('valLoss', valLoss)
 
     def trainKerasModelBatch(self, batchSize):
         convertedTraining = self.ds.batches_converted(train=True, batch_size=batchSize)
+        tl = []
+        ta = []
         for batchInstances in convertedTraining:
             featureList = batchInstances[0]
             target = batchInstances[1]
             # print(featureList)
-            miniBatchY = to_categorical(target,num_classes=self.nClasses)
+            miniBatchY = target
             miniBatchX = self.convertX(featureList)
             # print(miniBatchY)
             # print(miniBatchX)
-            self.trainMiniBatch(miniBatchX, miniBatchY)
+            currentLoss, currentAccuracy = self.trainMiniBatch(miniBatchX, miniBatchY)
+            print(currentLoss,currentAccuracy)
+            tl.append(currentLoss)
+            ta.append(currentAccuracy)
+        print(tl)
+        print('train loss')
+        print(sum(tl)/len(tl), sum(ta)/len(ta))
 
     def convertX(self, xList):
         # numInputAttribute = max(self.inputMask)+1
@@ -177,7 +184,10 @@ class KerasWrapperImpl1(object):
             for eachAttribute in miniBatchX:
                 eachAttribute.append([])
             for maskIdx in range(len(self.inputMask)):
-                miniBatchX[self.inputMask[maskIdx]][-1].append(xList[maskIdx][xid])
+                if self.featureKindList[maskIdx] == 'N':
+                    miniBatchX[self.inputMask[maskIdx]][-1]+=xList[maskIdx][xid]
+                else:
+                    miniBatchX[self.inputMask[maskIdx]][-1].append(xList[maskIdx][xid])
         return miniBatchX
 
     def trainMiniBatch(self, miniBatchX, miniBatchY):
@@ -185,8 +195,9 @@ class KerasWrapperImpl1(object):
         newX = []
         for item in miniBatchX:
             newX.append(np.array(item))
-        # print(newX)
+        #print(newX[0][0])
         # print(newX[0].shape)
         trainLoss = self.model.train_on_batch(x=newX, y=np.array(miniBatchY))
         # loss = self.model.test_on_batch(x=newX, y=np.array(miniBatchY))
         # print(trainLoss)
+        return trainLoss
