@@ -1,9 +1,10 @@
 from __future__ import division
 import numpy as np
 from keras.models import Sequential, Model
-from keras.layers import Dense, Input, Concatenate
+from keras.layers import Dense, Input, Concatenate,Reshape, Lambda
 from keras.layers import LSTM, Conv1D, Flatten, Dropout, Merge, TimeDistributed, MaxPooling1D, Conv2D
 from keras.layers.embeddings import Embedding
+import keras.backend as K
 from keras.utils import to_categorical
 
 
@@ -30,6 +31,7 @@ class KerasWrapperImpl1(object):
         self.outputLayersList = []
         self.featureState = []
         self.model = None
+        self.inputShape=[]
 
     def genMask(self):
         maskIdDict = {}
@@ -69,7 +71,16 @@ class KerasWrapperImpl1(object):
 
     def genKerasModel(self):
         if self.ds.isSequence:
-            pass
+            self.genSequenceInputLayer()
+            self.genSequenceHiddenLayer()
+            if len(self.inputLayerList) > 1:
+                allHidden = Concatenate()(self.outputLayersList)
+            else:
+                allHidden = self.outputLayersList[0]
+            output = TimeDistributed(Dense(self.ds.nClasses, activation='softmax'))(allHidden)
+            model = Model(self.inputLayerList, output)
+            model.compile(loss='binary_crossentropy', optimizer='Adamax', metrics=['accuracy'])
+            model.summary()
         else:
             self.genInputLayer()
             self.genHiddenLayers()
@@ -88,6 +99,41 @@ class KerasWrapperImpl1(object):
             model.compile(loss='binary_crossentropy', optimizer='Adamax', metrics=['accuracy'])
             model.summary()
         self.model = model
+
+
+    def genSequenceHiddenLayer(self):
+        for i in range(len(self.inputLayerList)):
+            currentShape = self.inputShape[i]
+            print(currentShape)
+            current_output = self.outputLayersList[i]
+            print(current_output)
+            current_output = LSTM(units=16, return_sequences=True)(current_output)
+            self.outputLayersList[i] = current_output
+
+
+
+    def genSequenceInputLayer(self):
+        print(self.uniqueAttri)
+        sequenceFeature = False
+        numFeature = False
+        for attribId in self.uniqueAttri:
+            featureIndexList = np.where(self.inputMask == attribId)
+            currentKindList = self.featureKindList[featureIndexList]
+            if ('L' in currentKindList):
+                vocabSize = len(self.ds.features.features[featureIndexList[0][0]].vocab.freqs) + 10000
+                current_input = Input(shape=(None,len(currentKindList)))
+                print(current_input)
+                current_output = Embedding(vocabSize, self.embeddingSize)(current_input)
+                print(current_output)
+                s = K.shape(current_output)
+                print(s)
+                current_output = Lambda(lambda x: K.reshape(x, shape=[-1, s[1],self.embeddingSize*len(currentKindList)]))(current_output)
+                #current_output = Reshape((-1,1,self.embeddingSize*len(currentKindList)))(current_output)
+                print(current_output)
+            self.inputLayerList.append(current_input)
+            self.outputLayersList.append(current_output)
+            self.featureState.append([sequenceFeature, numFeature])
+            self.inputShape.append((None,None,len(currentKindList),self.embeddingSize))
 
     def genHiddenLayers(self):
         for i in range(len(self.inputLayerList)):
@@ -140,14 +186,14 @@ class KerasWrapperImpl1(object):
             self.outputLayersList.append(current_output)
             self.featureState.append([sequenceFeature, numFeature])
 
-    def trainModel(self, batchSize=4, nb_epoch=20):
+    def trainModel(self, batchSize=64, nb_epoch=20):
         self.ds.split(convert=True, keep_orig=False, validation_part=0.05)
         valset = self.ds.validation_set_converted(as_batch=True)
-        print(valset[1])
+        #print(valset[1])
         valx = self.convertX(valset[0])
-        valy = to_categorical(valset[1], num_classes=self.ds.nClasses)
+        valy = valset[1]
         newvalx = []
-        print(valx)
+        #print(valx)
         for item in valx:
             newvalx.append(np.array(item))
 
@@ -166,12 +212,12 @@ class KerasWrapperImpl1(object):
         for batchInstances in convertedTraining:
             featureList = batchInstances[0]
             target = batchInstances[1]
-            print(len(target))
-            print(target)
-            print(self.ds.nClasses)
-            miniBatchY = to_categorical(target,num_classes=self.ds.nClasses)
-            print(len(miniBatchY))
-            print(miniBatchY)
+            #print(len(target))
+            #print(target)
+            #print(self.ds.nClasses)
+            miniBatchY = target
+            #print(len(miniBatchY))
+            #print(miniBatchY)
             miniBatchX = self.convertX(featureList)
             # print(miniBatchY)
             # print(miniBatchX)
@@ -186,17 +232,36 @@ class KerasWrapperImpl1(object):
     def convertX(self, xList):
         # numInputAttribute = max(self.inputMask)+1
         numInputAttribute = len(self.uniqueAttri)
-        print(numInputAttribute)
+        #print(numInputAttribute)
         miniBatchX = [[] for i in range(numInputAttribute)]
+        #print(len(xList))
+        #print(len(xList[0]))
+        #print(len(xList[0][0]))
+
+
 
         for xid in range(len(xList[0])):
-            for eachAttribute in miniBatchX:
-                eachAttribute.append([])
-            for maskIdx in range(len(self.inputMask)):
-                if self.featureKindList[maskIdx] == 'N':
-                    miniBatchX[self.inputMask[maskIdx]][-1]+=xList[maskIdx][xid]
-                else:
-                    miniBatchX[self.inputMask[maskIdx]][-1].append(xList[maskIdx][xid])
+            #for eachAttribute in miniBatchX:
+            #    eachAttribute.append([])
+            if self.ds.isSequence and ('N' not in self.featureKindList):
+                allTime = [[] for i in range(numInputAttribute)]
+                for timeStamp in range(len(xList[0][0])):
+                    eachTime = [[] for i in range(numInputAttribute)]
+                    for maskIdx in range(len(self.inputMask)):
+                        eachTime[self.inputMask[maskIdx]].append(xList[maskIdx][xid][timeStamp])
+                    for ii in range(numInputAttribute):
+                        allTime[ii].append(eachTime[ii])
+                for iii in range(numInputAttribute):
+                    miniBatchX[iii].append(allTime[iii])
+
+
+            else:
+                for maskIdx in range(len(self.inputMask)):
+                    if self.featureKindList[maskIdx] == 'N':# or self.ds.isSequence:
+                        miniBatchX[self.inputMask[maskIdx]][-1]+=xList[maskIdx][xid]
+                    else:
+                        miniBatchX[self.inputMask[maskIdx]][-1].append(xList[maskIdx][xid])
+        #print(miniBatchX[0])
         return miniBatchX
 
     def trainMiniBatch(self, miniBatchX, miniBatchY):
