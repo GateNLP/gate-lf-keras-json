@@ -1,12 +1,13 @@
 from __future__ import division
 import numpy as np
-from keras.models import Sequential, Model
+from keras.models import Sequential, Model, load_model
 from keras.layers import Dense, Input, Concatenate,Reshape, Lambda
 from keras.layers import LSTM, Conv1D, Flatten, Dropout, Merge, TimeDistributed, MaxPooling1D, Conv2D
 from keras.layers.embeddings import Embedding
 import keras.backend as K
 from keras.utils import to_categorical
 import pickle
+
 
 class KerasWrapperImpl1(object):
     def __init__(self, dataSet, configDict=None):
@@ -21,8 +22,8 @@ class KerasWrapperImpl1(object):
         self.ngr_idxs = dataSet.get_indexlist_feature_idxs()
         self.genMask()
         self.inputMask = np.array(self.inputMask)
-        print(self.inputMask)
-        print(self.featureKindList)
+        #print(self.inputMask)
+        #print(self.featureKindList)
         self.featureKindList = np.array(self.featureKindList)
         self.uniqueAttri, self.AttriCount = np.unique(self.inputMask, return_counts=True)
         self.batchSize = 64
@@ -33,6 +34,31 @@ class KerasWrapperImpl1(object):
         self.model = None
         self.inputShape=[]
 
+    def applyModel(self, singleInstance, converted=False):
+        numInputAttribute = len(self.uniqueAttri)
+        inputX = [[] for i in range(numInputAttribute)]
+        for eachAttribute in inputX:
+            eachAttribute.append([])
+        for featureid in range(len(singleInstance)):
+            #print(self.inputMask[featureid])
+            #print(singleInstance[featureid])
+            inputX[self.inputMask[featureid]][-1].append(singleInstance[featureid])
+        #print(inputX)
+        prediction = self.model.predict(np.array(inputX[0]))
+        #print(prediction)
+        npItem = prediction[0]
+        idx = int(np.where(npItem == max(npItem))[0])
+        getlabel = self.ds.target.idx2label
+        labels = getlabel(idx)
+        #print(labels)
+        confidence = npItem[idx]
+        return labels, confidence
+
+    def loadModel(self, modelprefix):
+        self.model = load_model(modelprefix+'nn.model')
+        self.model.summary()
+        with open(modelprefix+'classParameters.pkl', 'rb') as fp:
+            self.featureKindList, self.inputMask, self.num_idxs, self.nom_idxs, self.ngr_idxs, self.uniqueAttri, self.AttriCount, self.featureState, self.inputShape = pickle.load(fp)
 
     def saveModel(self, modelprefix):
         self.model.save(modelprefix+'nn.model')
