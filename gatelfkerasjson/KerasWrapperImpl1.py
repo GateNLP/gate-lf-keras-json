@@ -56,7 +56,7 @@ class KerasWrapperImpl1(object):
 
     def loadModel(self, modelprefix):
         self.model = load_model(modelprefix+'nn.model')
-        self.model.summary()
+        #self.model.summary()
         with open(modelprefix+'classParameters.pkl', 'rb') as fp:
             self.featureKindList, self.inputMask, self.num_idxs, self.nom_idxs, self.ngr_idxs, self.uniqueAttri, self.AttriCount, self.featureState, self.inputShape = pickle.load(fp)
 
