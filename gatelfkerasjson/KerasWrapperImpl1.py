@@ -6,7 +6,7 @@ from keras.layers import LSTM, Conv1D, Flatten, Dropout, Merge, TimeDistributed,
 from keras.layers.embeddings import Embedding
 import keras.backend as K
 from keras.utils import to_categorical
-
+import pickle
 
 class KerasWrapperImpl1(object):
     def __init__(self, dataSet, configDict=None):
@@ -32,6 +32,13 @@ class KerasWrapperImpl1(object):
         self.featureState = []
         self.model = None
         self.inputShape=[]
+
+
+    def saveModel(self, modelprefix):
+        self.model.save(modelprefix+'nn.model')
+        classParameters = [self.featureKindList, self.inputMask, self.num_idxs, self.nom_idxs, self.ngr_idxs, self.uniqueAttri, self.AttriCount, self.featureState, self.inputShape] 
+        with open(modelprefix+'classParameters.pkl','wb') as fp:
+            pickle.dump(classParameters, fp)
 
     def genMask(self):
         maskIdDict = {}
