@@ -149,10 +149,11 @@ class KerasWrapperImpl1(object):
         print(self.uniqueAttri)
         sequenceFeature = False
         numFeature = False
+        print(self.featureKindList)
         for attribId in self.uniqueAttri:
             featureIndexList = np.where(self.inputMask == attribId)
             currentKindList = self.featureKindList[featureIndexList]
-            if ('L' in currentKindList):
+            if (1):
                 vocabSize = len(self.ds.features.features[featureIndexList[0][0]].vocab.freqs) + 10000
                 current_input = Input(shape=(None,len(currentKindList)))
                 print(current_input)
@@ -314,6 +315,7 @@ class KerasWrapperImpl1(object):
         #print(newX[0][0])
         # print(newX[0].shape)
         print(len(miniBatchY))
+        #print(newX[0],miniBatchY[0])
         trainLoss = self.model.train_on_batch(x=newX, y=np.array(miniBatchY))
         # loss = self.model.test_on_batch(x=newX, y=np.array(miniBatchY))
         # print(trainLoss)
