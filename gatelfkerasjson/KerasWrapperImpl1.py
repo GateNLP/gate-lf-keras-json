@@ -1,13 +1,22 @@
 from __future__ import division
 import numpy as np
+
 from keras.models import Sequential, Model, load_model
-from keras.layers import Dense, Input, Concatenate,Reshape, Lambda
+from keras.layers import Dense, Input, Concatenate,Reshape, Lambda, BatchNormalization
 from keras.layers import LSTM, Conv1D, Flatten, Dropout, Merge, TimeDistributed, MaxPooling1D, Conv2D
 from keras.layers.embeddings import Embedding
-import keras.backend as K
+from keras.backend import tf as K
 from keras.utils import to_categorical
 import pickle
+import tensorflow as tf
+#setattr(K.tf.contrib.rnn.GRUCell, '__deepcopy__', lambda self, _: self)
+#setattr(K.tf.contrib.rnn.BasicLSTMCell, '__deepcopy__', lambda self, _: self)
+#setattr(K.tf.contrib.rnn.MultiRNNCell, '__deepcopy__', lambda self, _: self)
 
+
+def sequenceModelReshape(x, outputshape):
+    resized = K.reshape(x, shape=outputshape)
+    return resized
 
 class KerasWrapperImpl1(object):
     def __init__(self, dataSet, configDict=None):
@@ -33,6 +42,7 @@ class KerasWrapperImpl1(object):
         self.featureState = []
         self.model = None
         self.inputShape=[]
+        self.finalOutputLayer=None
 
     def applyModel(self, singleInstance, converted=False):
         numInputAttribute = len(self.uniqueAttri)
@@ -54,11 +64,31 @@ class KerasWrapperImpl1(object):
         confidence = npItem[idx]
         return labels, confidence
 
+
+    def loadModelWeights(self, modelprefix):
+        #self.model = load_model(modelprefix+'nn.model')
+        #self.model.summary()
+        self.genKerasModel()
+        self.model.summary()
+        self.model.load_weights(modelprefix+'nn.weights')
+
+
+        with open(modelprefix+'classParameters.pkl', 'rb') as fp:
+            self.featureKindList, self.inputMask, self.num_idxs, self.nom_idxs, self.ngr_idxs, self.uniqueAttri, self.AttriCount, self.featureState, self.inputShape = pickle.load(fp)
+
     def loadModel(self, modelprefix):
         self.model = load_model(modelprefix+'nn.model')
         #self.model.summary()
         with open(modelprefix+'classParameters.pkl', 'rb') as fp:
             self.featureKindList, self.inputMask, self.num_idxs, self.nom_idxs, self.ngr_idxs, self.uniqueAttri, self.AttriCount, self.featureState, self.inputShape = pickle.load(fp)
+
+
+    def saveModelWeights(self, modelprefix):
+        self.model.save_weights(modelprefix+'nn.weights')
+        classParameters = [self.featureKindList, self.inputMask, self.num_idxs, self.nom_idxs, self.ngr_idxs, self.uniqueAttri, self.AttriCount, self.featureState, self.inputShape]
+        with open(modelprefix+'classParameters.pkl','wb') as fp:
+            pickle.dump(classParameters, fp)
+
 
     def saveModel(self, modelprefix):
         self.model.save(modelprefix+'nn.model')
@@ -111,7 +141,9 @@ class KerasWrapperImpl1(object):
             else:
                 allHidden = self.outputLayersList[0]
             output = TimeDistributed(Dense(self.ds.nClasses, activation='softmax'))(allHidden)
+            self.finalOutputLayer = output
             model = Model(self.inputLayerList, output)
+            
             model.compile(loss='binary_crossentropy', optimizer='Adamax', metrics=['accuracy'])
             model.summary()
         else:
@@ -128,9 +160,15 @@ class KerasWrapperImpl1(object):
                 # leave it for testing
                 output = Dense(self.ds.nClasses, activation="sigmoid")(allHidden)
                 # output = Dense(1, activation="sigmoid")(allHidden)
+            self.finalOutputLayer = output
             model = Model(self.inputLayerList, output)
             model.compile(loss='binary_crossentropy', optimizer='Adamax', metrics=['accuracy'])
             model.summary()
+        print(self.inputLayerList)
+        print(self.finalOutputLayer)
+        testmodel = Model(self.inputLayerList, self.finalOutputLayer)
+        testmodel.compile(loss='binary_crossentropy', optimizer='Adamax', metrics=['accuracy'])
+        testmodel.summary()
         self.model = model
 
 
@@ -142,8 +180,6 @@ class KerasWrapperImpl1(object):
             print(current_output)
             current_output = LSTM(units=16, return_sequences=True)(current_output)
             self.outputLayersList[i] = current_output
-
-
 
     def genSequenceInputLayer(self):
         print(self.uniqueAttri)
@@ -161,7 +197,10 @@ class KerasWrapperImpl1(object):
                 print(current_output)
                 s = K.shape(current_output)
                 print(s)
-                current_output = Lambda(lambda x: K.reshape(x, shape=[-1, s[1],self.embeddingSize*len(currentKindList)]))(current_output)
+                outputShape = [-1, s[1],self.embeddingSize*len(currentKindList)]
+                #current_output = Lambda(lambda x: K.reshape(x, shape=[-1, s[1],self.embeddingSize*len(currentKindList)]))(current_output)
+                current_output = Lambda(sequenceModelReshape, arguments={'outputshape':outputShape})(current_output)
+                #current_output = Lambda(reshapeFunction)(current_output)
                 #current_output = Reshape((-1,1,self.embeddingSize*len(currentKindList)))(current_output)
                 print(current_output)
             self.inputLayerList.append(current_input)
@@ -256,10 +295,10 @@ class KerasWrapperImpl1(object):
             # print(miniBatchY)
             # print(miniBatchX)
             currentLoss, currentAccuracy = self.trainMiniBatch(miniBatchX, miniBatchY)
-            print(currentLoss,currentAccuracy)
+            #print(currentLoss,currentAccuracy)
             tl.append(currentLoss)
             ta.append(currentAccuracy)
-        print(tl)
+        #print(tl)
         print('train loss')
         print(sum(tl)/len(tl), sum(ta)/len(ta))
 
@@ -313,9 +352,10 @@ class KerasWrapperImpl1(object):
         for item in miniBatchX:
             newX.append(np.array(item))
         #print(newX[0][0])
-        # print(newX[0].shape)
-        print(len(miniBatchY))
+        #print(newX[0].shape)
+        #print(len(miniBatchY))
         #print(newX[0],miniBatchY[0])
+        #print(miniBatchY[0])
         trainLoss = self.model.train_on_batch(x=newX, y=np.array(miniBatchY))
         # loss = self.model.test_on_batch(x=newX, y=np.array(miniBatchY))
         # print(trainLoss)
