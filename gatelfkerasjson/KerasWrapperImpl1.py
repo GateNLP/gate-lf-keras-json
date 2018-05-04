@@ -45,6 +45,7 @@ class KerasWrapperImpl1(object):
         self.finalOutputLayer=None
 
     def applyModel(self, singleInstance, converted=False):
+        singleInstance = self.ds.convert_indep(singleInstance)
         numInputAttribute = len(self.uniqueAttri)
         inputX = [[] for i in range(numInputAttribute)]
         for eachAttribute in inputX:
@@ -54,11 +55,17 @@ class KerasWrapperImpl1(object):
             #print(singleInstance[featureid])
             inputX[self.inputMask[featureid]][-1].append(singleInstance[featureid])
         #print(inputX)
-        prediction = self.model.predict(np.array(inputX[0]))
+        netInput = []
+        for item in inputX:
+            netInput.append(np.array(item))
+        prediction = self.model.predict(netInput)
         #print(prediction)
         npItem = prediction[0]
+        #print(npItem)
         idx = int(np.where(npItem == max(npItem))[0])
+        #print(idx)
         getlabel = self.ds.target.idx2label
+        #print(getlabel)
         labels = getlabel(idx)
         #print(labels)
         confidence = npItem[idx]
