@@ -3,7 +3,7 @@ import numpy as np
 
 from keras.models import Sequential, Model, load_model
 from keras.layers import Dense, Input, Concatenate,Reshape, Lambda, BatchNormalization
-from keras.layers import LSTM, Conv1D, Flatten, Dropout, Merge, TimeDistributed, MaxPooling1D, Conv2D
+from keras.layers import LSTM, Conv1D, Flatten, Dropout, TimeDistributed, MaxPooling1D, Conv2D
 from keras.layers.embeddings import Embedding
 from keras.backend import tf as K
 from keras.utils import to_categorical
@@ -197,7 +197,7 @@ class KerasWrapperImpl1(object):
             featureIndexList = np.where(self.inputMask == attribId)
             currentKindList = self.featureKindList[featureIndexList]
             if (1):
-                vocabSize = len(self.ds.features.features[featureIndexList[0][0]].vocab.freqs) + 10000
+                vocabSize = self.ds.features.features[featureIndexList[0][0]].vocab.size() + 10000
                 current_input = Input(shape=(None,len(currentKindList)))
                 print(current_input)
                 current_output = Embedding(vocabSize, self.embeddingSize)(current_input)
@@ -246,13 +246,13 @@ class KerasWrapperImpl1(object):
             featureIndexList = np.where(self.inputMask == attribId)
             currentKindList = self.featureKindList[featureIndexList]
             if ('L' in currentKindList):
-                vocabSize = len(self.ds.features.features[featureIndexList[0][0]].vocab.freqs) + 10000
+                vocabSize = self.ds.features.features[featureIndexList[0][0]].vocab.size() + 10000
                 current_input = Input(shape=(len(currentKindList),))
                 current_output = Embedding(vocabSize, self.embeddingSize, input_length=len(currentKindList))(
                     current_input)
             elif ('N' in currentKindList):
                 sequenceFeature = True
-                vocabSize = len(self.ds.features.features[featureIndexList[0][0]].vocab.freqs) + 10000
+                vocabSize = self.ds.features.features[featureIndexList[0][0]].vocab.size() + 10000
                 current_input = Input(shape=(None,))
 
                 current_output = Embedding(vocabSize, self.embeddingSize)(current_input)
