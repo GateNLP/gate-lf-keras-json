@@ -9,6 +9,8 @@ from keras.backend import tf as K
 from keras.utils import to_categorical
 import pickle
 import tensorflow as tf
+from keras.layers.core import *
+
 #setattr(K.tf.contrib.rnn.GRUCell, '__deepcopy__', lambda self, _: self)
 #setattr(K.tf.contrib.rnn.BasicLSTMCell, '__deepcopy__', lambda self, _: self)
 #setattr(K.tf.contrib.rnn.MultiRNNCell, '__deepcopy__', lambda self, _: self)
@@ -45,31 +47,62 @@ class KerasWrapperImpl1(object):
         self.finalOutputLayer=None
 
     def applyModel(self, singleInstance, converted=False):
+        #print(singleInstance)
         singleInstance = self.ds.convert_indep(singleInstance)
-        numInputAttribute = len(self.uniqueAttri)
-        inputX = [[] for i in range(numInputAttribute)]
-        for eachAttribute in inputX:
-            eachAttribute.append([])
-        for featureid in range(len(singleInstance)):
-            #print(self.inputMask[featureid])
-            #print(singleInstance[featureid])
-            inputX[self.inputMask[featureid]][-1].append(singleInstance[featureid])
-        #print(inputX)
-        netInput = []
-        for item in inputX:
-            netInput.append(np.array(item))
-        prediction = self.model.predict(netInput)
-        #print(prediction)
-        npItem = prediction[0]
-        #print(npItem)
-        idx = int(np.where(npItem == max(npItem))[0])
-        #print(idx)
-        getlabel = self.ds.target.idx2label
-        #print(getlabel)
-        labels = getlabel(idx)
-        #print(labels)
-        confidence = npItem[idx]
-        return labels, confidence
+        #print(singleInstance)
+        if self.ds.isSequence:
+            label_list = []
+            conf_list = []
+            numInputAttribute = len(self.uniqueAttri)
+            full_input = []
+            for each_time in singleInstance:
+                inputX = []
+                for featureid in range(len(each_time)):
+                    inputX.append(each_time[featureid])
+                #print(inputX)
+                full_input.append(inputX)
+            prediction = self.model.predict(np.array([full_input]))
+            #print(prediction) 
+            for npItem in prediction[0]:
+                idx = int(np.where(npItem == max(npItem))[0])
+                #print(idx)
+                getlabel = self.ds.target.idx2label
+                #print(getlabel)
+                labels = getlabel(idx)
+                #print(labels)
+                confidence = npItem[idx]
+                label_list.append(labels)
+                conf_list.append(confidence)
+            return label_list, conf_list
+
+        else:
+            numInputAttribute = len(self.uniqueAttri)
+            inputX = [[] for i in range(numInputAttribute)]
+            for eachAttribute in inputX:
+                eachAttribute.append([])
+            for featureid in range(len(singleInstance)):
+                #print(len(singleInstance))
+                #print(self.inputMask)
+                #print(self.inputMask[featureid])
+                #print(singleInstance[featureid])
+                inputX[self.inputMask[featureid]][-1].append(singleInstance[featureid])
+            #print(inputX)
+            netInput = []
+            for item in inputX:
+                netInput.append(np.array(item))
+            prediction = self.model.predict(netInput)
+            #prediction = self.model.predict(np.array([singleInstance]))
+            #print(prediction)
+            npItem = prediction[0]
+            #print(npItem)
+            idx = int(np.where(npItem == max(npItem))[0])
+            #print(idx)
+            getlabel = self.ds.target.idx2label
+            #print(getlabel)
+            labels = getlabel(idx)
+            #print(labels)
+            confidence = npItem[idx]
+            return labels, confidence
 
 
     def loadModelWeights(self, modelprefix):
@@ -205,10 +238,8 @@ class KerasWrapperImpl1(object):
                 s = K.shape(current_output)
                 print(s)
                 outputShape = [-1, s[1],self.embeddingSize*len(currentKindList)]
-                #current_output = Lambda(lambda x: K.reshape(x, shape=[-1, s[1],self.embeddingSize*len(currentKindList)]))(current_output)
-                current_output = Lambda(sequenceModelReshape, arguments={'outputshape':outputShape})(current_output)
-                #current_output = Lambda(reshapeFunction)(current_output)
-                #current_output = Reshape((-1,1,self.embeddingSize*len(currentKindList)))(current_output)
+                #current_output = Lambda(sequenceModelReshape, arguments={'outputshape':outputShape})(current_output)
+                current_output = Reshape((-1, self.embeddingSize*len(currentKindList)))(current_output)
                 print(current_output)
             self.inputLayerList.append(current_input)
             self.outputLayersList.append(current_output)
